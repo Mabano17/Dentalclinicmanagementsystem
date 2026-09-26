@@ -118,7 +118,7 @@ export default function AdminAppointmentsPage() {
       <div className="p-6">
         <div className="flex flex-wrap gap-3 mb-4">
           <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search patient, dentist…" />
-          <FilterSelect label="Status" value={status} onChange={(v) => { setStatus(v); setPage(1); }}
+          <FilterSelect placeholder="All Statuses" value={status} onChange={(v) => { setStatus(v); setPage(1); }}
             options={STATUSES.map((s) => ({ value: s, label: s || "All Statuses" }))} />
         </div>
 
