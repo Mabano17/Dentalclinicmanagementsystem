@@ -7,6 +7,7 @@ import {
 } from "recharts";
 import PageLayout from "@/components/PageLayout";
 import DashboardCard from "@/components/DashboardCard";
+import { FaUsers, FaCalendarAlt, FaCheckCircle, FaMoneyBillWave, FaClock, FaTimesCircle, FaPills, FaCreditCard } from "react-icons/fa";
 import { reportsAPI } from "@/lib/api";
 import { formatCurrency, extractError } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
@@ -21,10 +22,7 @@ export default function AdminReportsPage() {
   const [apptData, setApptData] = useState<{ monthly: unknown[]; statusBreakdown: unknown[]; topDentists: unknown[] }>({ monthly: [], statusBreakdown: [], topDentists: [] });
   const [revenueData, setRevenueData] = useState<{ monthly: unknown[]; methodBreakdown: unknown[] }>({ monthly: [], methodBreakdown: [] });
   const [serviceData, setServiceData] = useState<{ popular: unknown[] }>({ popular: [] });
-  const [loading, setLoading] = useState(true);
-
   const load = useCallback(async () => {
-    setLoading(true);
     const params = { date_from: dateFrom || undefined, date_to: dateTo || undefined };
     try {
       const [d, a, r, s] = await Promise.all([
@@ -38,7 +36,6 @@ export default function AdminReportsPage() {
       setRevenueData({ monthly: r.data.data.monthly_revenue ?? [], methodBreakdown: r.data.data.payment_method_breakdown ?? [] });
       setServiceData({ popular: s.data.data.popular_services ?? [] });
     } catch (err) { showToast(extractError(err), "error"); }
-    finally { setLoading(false); }
   }, [dateFrom, dateTo, showToast]);
 
   useEffect(() => { load(); }, [load]);
@@ -62,16 +59,16 @@ export default function AdminReportsPage() {
 
         {/* KPI Summary */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <DashboardCard title="Total Patients" value={dashboard.total_patients ?? 0} icon="👥" color="blue" />
-          <DashboardCard title="Total Appointments" value={dashboard.total_appointments ?? 0} icon="📅" color="purple" />
-          <DashboardCard title="Completed" value={dashboard.completed_appointments ?? 0} icon="✅" color="green" />
-          <DashboardCard title="Total Revenue" value={formatCurrency(dashboard.total_revenue ?? 0)} icon="💰" color="yellow" />
+          <DashboardCard title="Total Patients" value={dashboard.total_patients ?? 0} icon={FaUsers} color="blue" />
+          <DashboardCard title="Total Appointments" value={dashboard.total_appointments ?? 0} icon={FaCalendarAlt} color="purple" />
+          <DashboardCard title="Completed" value={dashboard.completed_appointments ?? 0} icon={FaCheckCircle} color="green" />
+          <DashboardCard title="Total Revenue" value={formatCurrency(dashboard.total_revenue ?? 0)} icon={FaMoneyBillWave} color="orange" />
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <DashboardCard title="Pending" value={dashboard.pending_appointments ?? 0} icon="⏳" color="yellow" />
-          <DashboardCard title="Cancelled" value={dashboard.cancelled_appointments ?? 0} icon="❌" color="red" />
-          <DashboardCard title="Total Treatments" value={dashboard.total_treatments ?? 0} icon="💊" color="purple" />
-          <DashboardCard title="Paid Payments" value={dashboard.paid_payments ?? 0} icon="💳" color="green" />
+          <DashboardCard title="Pending" value={dashboard.pending_appointments ?? 0} icon={FaClock} color="orange" />
+          <DashboardCard title="Cancelled" value={dashboard.cancelled_appointments ?? 0} icon={FaTimesCircle} color="red" />
+          <DashboardCard title="Total Treatments" value={dashboard.total_treatments ?? 0} icon={FaPills} color="purple" />
+          <DashboardCard title="Paid Payments" value={dashboard.paid_payments ?? 0} icon={FaCreditCard} color="green" />
         </div>
 
         {/* Charts row 1 */}

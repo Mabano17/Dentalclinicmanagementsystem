@@ -126,8 +126,8 @@ export default function AdminPatientsPage() {
         <div className="flex flex-wrap gap-3 mb-4 justify-between">
           <div className="flex gap-3">
             <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search name, email…" />
-            <FilterSelect label="Status" value={statusFilter} onChange={(v) => { setStatusFilter(v); setPage(1); }}
-              options={[{ value: "", label: "All" }, { value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
+            <FilterSelect placeholder="All Statuses" value={statusFilter} onChange={(v) => { setStatusFilter(v); setPage(1); }}
+              options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
           </div>
           <button onClick={() => { setForm(blank()); setMode("add"); }}
             className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">

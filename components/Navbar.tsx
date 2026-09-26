@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
 
 interface NavbarProps {
   title: string;
-  role: "ADMIN" | "PATIENT";
+  role: "ADMIN" | "PATIENT" | "DENTIST";
 }
 
 export default function Navbar({ title, role }: NavbarProps) {
@@ -58,8 +58,8 @@ export default function Navbar({ title, role }: NavbarProps) {
     }
   };
 
-  const messagesHref = role === "ADMIN" ? "/admin/messages" : "/patient/messages";
-  const profileHref = role === "PATIENT" ? "/patient/profile" : undefined;
+  const messagesHref = role === "ADMIN" ? "/admin/messages" : role === "DENTIST" ? "/dentist/messages" : "/patient/messages";
+  const profileHref = role === "PATIENT" ? "/patient/profile" : role === "DENTIST" ? "/dentist/profile" : undefined;
 
   return (
     <header className="h-16 bg-white border-b border-gray-100 flex items-center px-6 gap-4 sticky top-0 z-30">

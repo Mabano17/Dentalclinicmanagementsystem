@@ -111,7 +111,7 @@ export default function HomePage() {
   useEffect(() => {
     if (isAuthenticated()) {
       const user = getUser();
-      router.replace(user?.role === "admin" ? "/admin/dashboard" : "/patient/dashboard");
+      router.replace(user?.role === "ADMIN" ? "/admin/dashboard" : user?.role === "DENTIST" ? "/dentist/dashboard" : "/patient/dashboard");
     }
   }, [router]);
 

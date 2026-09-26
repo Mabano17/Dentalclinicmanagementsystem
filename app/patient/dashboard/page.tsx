@@ -5,7 +5,7 @@ import Link from "next/link";
 import PageLayout from "@/components/PageLayout";
 import DashboardCard from "@/components/DashboardCard";
 import { FaCalendarAlt, FaClock, FaCheckCircle, FaMoneyBillWave } from "react-icons/fa";
-import { appointmentsAPI, treatmentsAPI, paymentsAPI } from "@/lib/api";
+import { appointmentsAPI, paymentsAPI } from "@/lib/api";
 import { formatDate, formatTime, getStatusColor, extractError } from "@/lib/utils";
 import { getUser } from "@/lib/auth";
 import { useToast } from "@/components/Toast";
@@ -33,9 +33,8 @@ export default function PatientDashboardPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [apptRes, treatRes, payRes] = await Promise.all([
+        const [apptRes, payRes] = await Promise.all([
           appointmentsAPI.getAll({ page_size: 100 }),
-          treatmentsAPI.getAll({ page_size: 1 }),
           paymentsAPI.getAll({ payment_status: "PAID", page_size: 100 }),
         ]);
 

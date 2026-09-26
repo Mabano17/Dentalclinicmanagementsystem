@@ -139,10 +139,10 @@ export default function AdminPaymentsPage() {
         <div className="flex flex-wrap gap-3 mb-4 justify-between">
           <div className="flex flex-wrap gap-3">
             <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search patient, reference…" />
-            <FilterSelect label="Status" value={statusFilter} onChange={(v) => { setStatusFilter(v); setPage(1); }}
-              options={[{ value: "", label: "All Status" }, ...STATUSES.map((s) => ({ value: s, label: s }))]} />
-            <FilterSelect label="Method" value={methodFilter} onChange={(v) => { setMethodFilter(v); setPage(1); }}
-              options={[{ value: "", label: "All Methods" }, ...METHODS.map((m) => ({ value: m, label: methodLabel[m] }))]} />
+            <FilterSelect placeholder="All Statuses" value={statusFilter} onChange={(v) => { setStatusFilter(v); setPage(1); }}
+              options={[...STATUSES.map((s) => ({ value: s, label: s || "All Statuses" }))]} />
+            <FilterSelect placeholder="All Methods" value={methodFilter} onChange={(v) => { setMethodFilter(v); setPage(1); }}
+              options={[...METHODS.map((m) => ({ value: m, label: methodLabel[m] }))]} />
           </div>
           <button onClick={() => { setForm(blank()); loadPatients(); setMode("add"); }}
             className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">+ Add Payment</button>

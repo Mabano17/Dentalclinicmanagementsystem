@@ -7,6 +7,7 @@ import {
 } from "recharts";
 import PageLayout from "@/components/PageLayout";
 import DashboardCard from "@/components/DashboardCard";
+import { FaUsers, FaTooth, FaCalendarDay, FaMoneyBillWave, FaCalendarAlt, FaClock, FaCheckCircle, FaTimesCircle, FaPills, FaHourglassHalf } from "react-icons/fa";
 import { reportsAPI } from "@/lib/api";
 import { extractError, formatCurrency } from "@/lib/utils";
 
@@ -85,18 +86,18 @@ export default function AdminDashboardPage() {
 
         {/* KPI Cards — Row 1 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <DashboardCard title="Total Patients" value={data?.total_patients ?? 0} icon="👥" color="blue" />
-          <DashboardCard title="Total Dentists" value={data?.active_dentists ?? 0} icon="🦷" color="green" />
-          <DashboardCard title="Today's Appointments" value={data?.todays_appointments ?? 0} icon="📅" color="purple" />
-          <DashboardCard title="Total Revenue" value={formatCurrency(data?.total_revenue ?? 0)} icon="💰" color="yellow" />
+          <DashboardCard title="Total Patients" value={data?.total_patients ?? 0} icon={FaUsers} color="blue" />
+          <DashboardCard title="Total Dentists" value={data?.active_dentists ?? 0} icon={FaTooth} color="green" />
+          <DashboardCard title="Today's Appointments" value={data?.todays_appointments ?? 0} icon={FaCalendarDay} color="purple" />
+          <DashboardCard title="Total Revenue" value={formatCurrency(data?.total_revenue ?? 0)} icon={FaMoneyBillWave} color="orange" />
         </div>
 
         {/* KPI Cards — Row 2 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <DashboardCard title="All Appointments" value={data?.total_appointments ?? 0} icon="📋" color="blue" />
-          <DashboardCard title="Pending" value={data?.pending_appointments ?? 0} icon="⏳" color="yellow" />
-          <DashboardCard title="Completed" value={data?.completed_appointments ?? 0} icon="✅" color="green" />
-          <DashboardCard title="Cancelled" value={data?.cancelled_appointments ?? 0} icon="❌" color="red" />
+          <DashboardCard title="All Appointments" value={data?.total_appointments ?? 0} icon={FaCalendarAlt} color="blue" />
+          <DashboardCard title="Pending" value={data?.pending_appointments ?? 0} icon={FaClock} color="orange" />
+          <DashboardCard title="Completed" value={data?.completed_appointments ?? 0} icon={FaCheckCircle} color="green" />
+          <DashboardCard title="Cancelled" value={data?.cancelled_appointments ?? 0} icon={FaTimesCircle} color="red" />
         </div>
 
         {/* Charts Row */}
@@ -151,9 +152,9 @@ export default function AdminDashboardPage() {
 
         {/* Bottom stats */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <DashboardCard title="Total Treatments" value={data?.total_treatments ?? 0} icon="💊" color="purple" />
-          <DashboardCard title="Paid Payments" value={data?.paid_payments ?? 0} icon="✅" color="green" />
-          <DashboardCard title="Pending Payments" value={data?.pending_payments ?? 0} icon="⏳" color="yellow" />
+          <DashboardCard title="Total Treatments" value={data?.total_treatments ?? 0} icon={FaPills} color="purple" />
+          <DashboardCard title="Paid Payments" value={data?.paid_payments ?? 0} icon={FaCheckCircle} color="green" />
+          <DashboardCard title="Pending Payments" value={data?.pending_payments ?? 0} icon={FaHourglassHalf} color="orange" />
         </div>
       </div>
     </PageLayout>

@@ -69,9 +69,8 @@ export default function PatientPaymentsPage() {
     <PageLayout title="My Payments">
       <div className="p-6">
         <div className="flex gap-3 mb-4">
-          <FilterSelect label="Status" value={statusFilter} onChange={(v) => { setStatusFilter(v); setPage(1); }}
+          <FilterSelect placeholder="All Statuses" value={statusFilter} onChange={(v) => { setStatusFilter(v); setPage(1); }}
             options={[
-              { value: "", label: "All" },
               { value: "PENDING", label: "Pending" },
               { value: "PAID", label: "Paid" },
               { value: "CANCELLED", label: "Cancelled" },

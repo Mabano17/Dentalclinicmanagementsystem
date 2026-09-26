@@ -68,7 +68,7 @@ export default function PatientMessagesPage() {
   // Load admin users when composing
   const openCompose = async () => {
     try {
-      const { data } = await authAPI.getProfile();
+      await authAPI.getProfile();
       // We need to find admins to message — fetch from patients endpoint workaround
       // In practice the admin's UUID is stored in received messages
       const adminIds = new Set(messages.map((m) => m.sender === me?.id ? m.receiver : m.sender));

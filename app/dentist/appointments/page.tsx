@@ -103,9 +103,8 @@ function DentistAppointmentsPage() {
       <PageLayout title="My Appointments">
       <div className="p-6">
         <div className="flex gap-3 mb-4">
-          <FilterSelect label="Status" value={statusFilter} onChange={(v) => { setStatusFilter(v); setPage(1); }}
+          <FilterSelect placeholder="All Statuses" value={statusFilter} onChange={(v) => { setStatusFilter(v); setPage(1); }}
             options={[
-              { value: "", label: "All" },
               { value: "PENDING", label: "Pending" },
               { value: "CONFIRMED", label: "Confirmed" },
               { value: "COMPLETED", label: "Completed" },
