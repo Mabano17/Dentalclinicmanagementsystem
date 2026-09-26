@@ -1,205 +1,105 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { FiDollarSign, FiEye } from "react-icons/fi";
 import PageLayout from "@/components/PageLayout";
-import AuthGuard from "@/components/AuthGuard";
-import DataTable, { Column } from "@/components/DataTable";
-import SearchBar from "@/components/SearchBar";
-import { FilterSelect } from "@/components/Filter";
+import DataTable from "@/components/DataTable";
 import Modal from "@/components/Modal";
-import ErrorMessage from "@/components/ErrorMessage";
+import { FilterSelect } from "@/components/Filter";
 import { paymentsAPI } from "@/lib/api";
-import { formatDate, formatCurrency, getStatusColor, paymentMethodLabel, extractError } from "@/lib/utils";
+import { formatDate, formatCurrency, getStatusColor, extractError } from "@/lib/utils";
+import { useToast } from "@/components/Toast";
 
 interface Payment {
-  id: number;
-  appointment_id: number;
-  appointment_info?: string;
-  amount: string | number;
-  payment_date: string;
+  id: string;
+  appointment: string | null;
+  amount: string;
+  payment_date: string | null;
   payment_method: string;
-  status: string;
-  reference_number: string;
+  payment_status: string;
+  reference_number: string | null;
+  notes: string;
+  created_at: string;
 }
 
-const STATUS_OPTIONS = [
-  { label: "All Statuses", value: "" },
-  { label: "Paid", value: "paid" },
-  { label: "Unpaid", value: "unpaid" },
-  { label: "Partial", value: "partial" },
-];
-
-const METHOD_OPTIONS = [
-  { label: "All Methods", value: "" },
-  { label: "Cash", value: "cash" },
-  { label: "GCash", value: "gcash" },
-  { label: "Maya", value: "maya" },
-  { label: "Bank Transfer", value: "bank_transfer" },
-  { label: "Credit Card", value: "credit_card" },
-];
+const METHOD_LABEL: Record<string, string> = {
+  CASH: "Cash", GCASH: "GCash", BANK_TRANSFER: "Bank Transfer", OTHER: "Other",
+};
 
 export default function PatientPaymentsPage() {
+  const { showToast } = useToast();
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [methodFilter, setMethodFilter] = useState("");
+  const [count, setCount] = useState(0);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Payment | null>(null);
 
-  const fetchPayments = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true);
-    setError("");
     try {
-      const params: Record<string, unknown> = { page };
-      if (search) params.search = search;
-      if (statusFilter) params.status = statusFilter;
-      if (methodFilter) params.payment_method = methodFilter;
-      const { data } = await paymentsAPI.getAll(params);
-      setPayments(data.results ?? data);
-      setTotalPages(data.total_pages ?? 1);
-      setTotalCount(data.count ?? (data.results ?? data).length);
-    } catch (err) {
-      setError(extractError(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [page, search, statusFilter, methodFilter]);
+      const { data } = await paymentsAPI.getAll({ page, payment_status: statusFilter || undefined });
+      setPayments(data.results ?? []);
+      setCount(data.count ?? 0);
+    } catch (err) { showToast(extractError(err), "error"); }
+    finally { setLoading(false); }
+  }, [page, statusFilter, showToast]);
 
-  useEffect(() => { fetchPayments(); }, [fetchPayments]);
+  useEffect(() => { load(); }, [load]);
 
-  const totalPaid = payments
-    .filter((p) => p.status === "paid")
-    .reduce((sum, p) => sum + Number(p.amount), 0);
-
-  const columns: Column<Payment>[] = [
-    { key: "id", header: "ID", render: (r) => <span className="text-gray-400 text-xs">#{r.id}</span> },
+  const columns = [
+    { key: "amount", header: "Amount", render: (r: Payment) => <span className="font-semibold text-gray-800">{formatCurrency(r.amount)}</span> },
+    { key: "method", header: "Method", render: (r: Payment) => METHOD_LABEL[r.payment_method] ?? r.payment_method },
+    { key: "date", header: "Date", render: (r: Payment) => formatDate(r.payment_date ?? "") },
     {
-      key: "appointment_id",
-      header: "Appointment",
-      render: (r) => <span className="text-gray-600">Appt #{r.appointment_id}</span>,
+      key: "status", header: "Status",
+      render: (r: Payment) => (
+        <span className={`px-2 py-0.5 text-xs font-medium rounded-full border ${getStatusColor(r.payment_status)}`}>{r.payment_status}</span>
+      ),
     },
-    { key: "amount", header: "Amount", render: (r) => <span className="font-semibold">{formatCurrency(Number(r.amount))}</span> },
-    { key: "payment_date", header: "Date", render: (r) => formatDate(r.payment_date) },
-    { key: "payment_method", header: "Method", render: (r) => paymentMethodLabel(r.payment_method) },
+    { key: "reference", header: "Reference", render: (r: Payment) => r.reference_number ?? "—" },
     {
-      key: "status",
-      header: "Status",
-      render: (r) => <span className={`badge ${getStatusColor(r.status)}`}>{r.status}</span>,
-    },
-    {
-      key: "reference_number",
-      header: "Reference",
-      render: (r) => <span className="font-mono text-xs">{r.reference_number || "—"}</span>,
-    },
-    {
-      key: "actions",
-      header: "",
-      render: (r) => (
-        <button onClick={() => setSelected(r)} className="btn-secondary btn-sm">
-          <FiEye className="w-3.5 h-3.5" />
-        </button>
+      key: "actions", header: "",
+      render: (r: Payment) => (
+        <button onClick={() => setSelected(r)} className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100">View</button>
       ),
     },
   ];
 
   return (
-    <AuthGuard requiredRole="patient">
-      <PageLayout role="patient" title="My Payments">
-        <div className="page-header">
-          <div>
-            <h2 className="page-title">My Payments</h2>
-            <p className="page-subtitle">Track your payment history and billing records.</p>
-          </div>
-          {/* Summary */}
-          <div className="hidden sm:flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5">
-            <FiDollarSign className="w-4 h-4 text-green-600" />
-            <div>
-              <p className="text-xs text-green-600">Total Paid (this view)</p>
-              <p className="text-sm font-bold text-green-800">{formatCurrency(totalPaid)}</p>
-            </div>
-          </div>
+    <PageLayout title="My Payments">
+      <div className="p-6">
+        <div className="flex gap-3 mb-4">
+          <FilterSelect label="Status" value={statusFilter} onChange={(v) => { setStatusFilter(v); setPage(1); }}
+            options={[
+              { value: "", label: "All" },
+              { value: "PENDING", label: "Pending" },
+              { value: "PAID", label: "Paid" },
+              { value: "CANCELLED", label: "Cancelled" },
+            ]} />
         </div>
+        <DataTable columns={columns} data={payments} loading={loading}
+          pagination={{ page, totalCount: count, pageSize: 20, onPageChange: setPage }} />
+      </div>
 
-        {/* Filters */}
-        <div className="card mb-5">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <SearchBar
-              value={search}
-              onChange={(v) => { setSearch(v); setPage(1); }}
-              placeholder="Search payments…"
-              className="flex-1"
-            />
-            <FilterSelect
-              value={statusFilter}
-              options={STATUS_OPTIONS}
-              onChange={(v) => { setStatusFilter(v); setPage(1); }}
-              placeholder="All Statuses"
-              className="w-40"
-            />
-            <FilterSelect
-              value={methodFilter}
-              options={METHOD_OPTIONS}
-              onChange={(v) => { setMethodFilter(v); setPage(1); }}
-              placeholder="All Methods"
-              className="w-44"
-            />
-          </div>
-        </div>
-
-        {error ? (
-          <ErrorMessage message={error} onRetry={fetchPayments} />
-        ) : (
-          <div className="card">
-            <DataTable
-              columns={columns}
-              data={payments}
-              loading={loading}
-              keyExtractor={(r) => r.id}
-              page={page}
-              totalPages={totalPages}
-              totalCount={totalCount}
-              onPageChange={setPage}
-              emptyMessage="No payment records found."
-            />
+      <Modal open={!!selected} onClose={() => setSelected(null)} title="Payment Details" size="sm">
+        {selected && (
+          <div className="space-y-3 text-sm">
+            {[
+              ["Amount", formatCurrency(selected.amount)],
+              ["Method", METHOD_LABEL[selected.payment_method] ?? selected.payment_method],
+              ["Status", selected.payment_status],
+              ["Payment Date", formatDate(selected.payment_date ?? "")],
+              ["Reference #", selected.reference_number ?? "—"],
+              ["Notes", selected.notes || "—"],
+            ].map(([l, v]) => (
+              <div key={l} className="flex gap-2">
+                <span className="font-medium text-gray-500 w-28 flex-shrink-0">{l}:</span>
+                <span className="text-gray-800">{v}</span>
+              </div>
+            ))}
           </div>
         )}
-
-        {/* Payment detail modal */}
-        <Modal
-          isOpen={!!selected}
-          onClose={() => setSelected(null)}
-          title={`Payment #${selected?.id}`}
-        >
-          {selected && (
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { label: "Amount", value: formatCurrency(Number(selected.amount)) },
-                { label: "Status", value: selected.status },
-                { label: "Date", value: formatDate(selected.payment_date) },
-                { label: "Method", value: paymentMethodLabel(selected.payment_method) },
-                { label: "Appointment", value: `#${selected.appointment_id}` },
-                { label: "Reference No.", value: selected.reference_number || "—" },
-              ].map(({ label, value }) => (
-                <div key={label}>
-                  <p className="text-xs text-gray-400 mb-0.5">{label}</p>
-                  {label === "Status" ? (
-                    <span className={`badge ${getStatusColor(value)}`}>{value}</span>
-                  ) : label === "Amount" ? (
-                    <p className="text-sm font-bold text-green-700">{value}</p>
-                  ) : (
-                    <p className="text-sm font-medium text-gray-900">{value}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </Modal>
-      </PageLayout>
-    </AuthGuard>
+      </Modal>
+    </PageLayout>
   );
 }

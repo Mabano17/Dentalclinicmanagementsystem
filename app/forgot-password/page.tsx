@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { FiMail, FiActivity, FiArrowLeft } from "react-icons/fi";
 import { authAPI } from "@/lib/api";
 import { extractError } from "@/lib/utils";
 
@@ -16,21 +15,19 @@ export default function ForgotPasswordPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) {
-      setError("Please enter your email address.");
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError("Please enter a valid email address.");
-      return;
-    }
-    setLoading(true);
     setError("");
+    setLoading(true);
     try {
       await authAPI.forgotPassword({ email });
-      sessionStorage.setItem("otp_email", email);
-      sessionStorage.setItem("otp_purpose", "reset_password");
       setSent(true);
+      // Navigate to reset-password page with email pre-filled
+      setTimeout(
+        () =>
+          router.push(
+            `/reset-password?email=${encodeURIComponent(email)}`
+          ),
+        1500
+      );
     } catch (err) {
       setError(extractError(err));
     } finally {
@@ -38,107 +35,58 @@ export default function ForgotPasswordPage() {
     }
   };
 
-  if (sent) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-teal-50 p-6">
-        <div className="w-full max-w-md text-center">
-          <div className="w-20 h-20 bg-green-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
-            <FiMail className="w-10 h-10 text-green-600" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Check your email
-          </h2>
-          <p className="text-gray-500 text-sm mb-6">
-            We sent a password reset OTP to{" "}
-            <span className="font-medium text-gray-700">{email}</span>. Enter
-            the code on the next page.
-          </p>
-          <button
-            onClick={() => router.push("/reset-password")}
-            className="btn-primary btn-lg w-full"
-          >
-            Continue to Reset Password
-          </button>
-          <p className="mt-4 text-sm text-gray-400">
-            Didn&apos;t receive it?{" "}
-            <button
-              onClick={() => setSent(false)}
-              className="text-blue-600 hover:underline"
-            >
-              Try again
-            </button>
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-teal-50 p-6">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-teal-500 flex items-center justify-center">
-            <FiActivity className="w-5 h-5 text-white" />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-600 text-white text-2xl mb-3">
+            🔑
           </div>
-          <span className="text-xl font-bold text-gray-900">DentalCare</span>
+          <h1 className="text-2xl font-bold text-gray-800">Forgot Password</h1>
+          <p className="text-gray-500 text-sm mt-1">
+            Enter your email and we&apos;ll send you a reset OTP.
+          </p>
         </div>
 
-        <div className="card">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Forgot Password?</h2>
-            <p className="text-gray-500 text-sm mt-1">
-              Enter your email and we&apos;ll send you a reset code.
-            </p>
+        {error && (
+          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+            {error}
           </div>
+        )}
+        {sent && (
+          <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">
+            If this email exists, a reset OTP has been sent. Redirecting…
+          </div>
+        )}
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
-                {error}
-              </div>
-            )}
-
-            <div className="form-group">
-              <label className="label">Email Address</label>
-              <div className="relative">
-                <FiMail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    setError("");
-                  }}
-                  placeholder="your@email.com"
-                  className="input pl-9"
-                  autoComplete="email"
-                  required
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary btn-lg w-full mt-2"
-            >
-              {loading ? (
-                <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                "Send Reset Code"
-              )}
-            </button>
-          </form>
-
-          <Link
-            href="/login"
-            className="flex items-center justify-center gap-2 mt-6 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Email Address
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder="you@example.com"
+              className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={loading || sent}
+            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg font-medium text-sm transition-colors"
           >
-            <FiArrowLeft className="w-4 h-4" />
-            Back to Login
+            {loading ? "Sending…" : "Send Reset OTP"}
+          </button>
+        </form>
+
+        <p className="text-center text-sm text-gray-500 mt-6">
+          <Link href="/login" className="text-blue-600 hover:underline">
+            ← Back to login
           </Link>
-        </div>
+        </p>
       </div>
     </div>
   );

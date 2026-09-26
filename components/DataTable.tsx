@@ -10,18 +10,20 @@ export interface Column<T> {
   className?: string;
 }
 
+interface PaginationProps {
+  page: number;
+  totalCount: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+}
+
 interface DataTableProps<T> {
   columns: Column<T>[];
   data: T[];
   loading?: boolean;
   emptyMessage?: string;
-  keyExtractor: (row: T) => string | number;
-  // Pagination
-  page?: number;
-  totalPages?: number;
-  onPageChange?: (page: number) => void;
-  totalCount?: number;
-  pageSize?: number;
+  keyExtractor?: (row: T) => string | number;
+  pagination?: PaginationProps;
 }
 
 export default function DataTable<T>({
@@ -30,12 +32,13 @@ export default function DataTable<T>({
   loading = false,
   emptyMessage = "No records found.",
   keyExtractor,
-  page = 1,
-  totalPages = 1,
-  onPageChange,
-  totalCount,
-  pageSize = 10,
+  pagination,
 }: DataTableProps<T>) {
+  const page = pagination?.page ?? 1;
+  const totalCount = pagination?.totalCount;
+  const pageSize = pagination?.pageSize ?? 10;
+  const onPageChange = pagination?.onPageChange;
+  const totalPages = totalCount ? Math.ceil(totalCount / pageSize) : 1;
   return (
     <div className="flex flex-col gap-4">
       <div className="table-wrapper">
@@ -62,8 +65,8 @@ export default function DataTable<T>({
                 </td>
               </tr>
             ) : (
-              data.map((row) => (
-                <tr key={keyExtractor(row)}>
+              data.map((row, i) => (
+                <tr key={keyExtractor ? keyExtractor(row) : (row as Record<string, unknown>).id as string ?? i}>
                   {columns.map((col) => (
                     <td key={col.key} className={col.className}>
                       {col.render
@@ -87,8 +90,8 @@ export default function DataTable<T>({
               <>
                 Showing{" "}
                 <span className="font-medium">
-                  {Math.min((page - 1) * pageSize + 1, totalCount)}–
-                  {Math.min(page * pageSize, totalCount)}
+                  {Math.min((page - 1) * pageSize + 1, totalCount ?? 0)}–
+                  {Math.min(page * pageSize, totalCount ?? 0)}
                 </span>{" "}
                 of <span className="font-medium">{totalCount}</span> records
               </>

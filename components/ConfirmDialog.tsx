@@ -3,32 +3,29 @@
 import { FiAlertTriangle } from "react-icons/fi";
 
 interface ConfirmDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
+  open: boolean;
+  onCancel: () => void;
   onConfirm: () => void;
   title: string;
   message: string;
   confirmLabel?: string;
-  confirmVariant?: "danger" | "primary";
+  variant?: "danger" | "primary";
   loading?: boolean;
 }
 
 export default function ConfirmDialog({
-  isOpen,
-  onClose,
+  open,
+  onCancel,
   onConfirm,
   title,
   message,
   confirmLabel = "Confirm",
-  confirmVariant = "danger",
+  variant = "danger",
   loading = false,
 }: ConfirmDialogProps) {
-  if (!isOpen) return null;
+  if (!open) return null;
 
-  const btnClass =
-    confirmVariant === "danger"
-      ? "btn-danger"
-      : "btn-primary";
+  const btnClass = variant === "danger" ? "btn-danger" : "btn-primary";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
@@ -43,7 +40,7 @@ export default function ConfirmDialog({
           </div>
         </div>
         <div className="flex items-center justify-end gap-3">
-          <button onClick={onClose} className="btn-secondary" disabled={loading}>
+          <button onClick={onCancel} className="btn-secondary" disabled={loading}>
             Cancel
           </button>
           <button

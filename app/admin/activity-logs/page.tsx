@@ -1,162 +1,104 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { FiList, FiUser, FiClock, FiMonitor } from "react-icons/fi";
 import PageLayout from "@/components/PageLayout";
-import AuthGuard from "@/components/AuthGuard";
-import DataTable, { Column } from "@/components/DataTable";
+import DataTable from "@/components/DataTable";
 import SearchBar from "@/components/SearchBar";
-import { FilterSelect } from "@/components/Filter";
-import ErrorMessage from "@/components/ErrorMessage";
 import { activityLogsAPI } from "@/lib/api";
 import { formatDateTime, extractError } from "@/lib/utils";
+import { useToast } from "@/components/Toast";
 
-interface ActivityLog {
-  id: number;
-  user: string;
+interface Log {
+  id: string;
+  user_email: string;
+  user_name: string;
   action: string;
   description: string;
-  ip_address?: string;
+  ip_address: string;
   created_at: string;
 }
 
-const ACTION_OPTS = [
-  { label: "All Actions", value: "" },
-  { label: "Login", value: "login" },
-  { label: "Logout", value: "logout" },
-  { label: "Create", value: "create" },
-  { label: "Update", value: "update" },
-  { label: "Delete", value: "delete" },
-  { label: "View", value: "view" },
-];
-
 const ACTION_COLORS: Record<string, string> = {
-  login: "bg-green-100 text-green-700 border-green-200",
-  logout: "bg-gray-100 text-gray-600 border-gray-200",
-  create: "bg-blue-100 text-blue-700 border-blue-200",
-  update: "bg-yellow-100 text-yellow-700 border-yellow-200",
-  delete: "bg-red-100 text-red-700 border-red-200",
-  view: "bg-purple-100 text-purple-700 border-purple-200",
+  LOGIN: "bg-green-100 text-green-700",
+  LOGOUT: "bg-gray-100 text-gray-600",
+  REGISTER: "bg-blue-100 text-blue-700",
+  OTP_VERIFIED: "bg-blue-100 text-blue-700",
+  PASSWORD_RESET: "bg-orange-100 text-orange-700",
+  FORGOT_PASSWORD: "bg-yellow-100 text-yellow-700",
+  PATIENT_CREATED: "bg-purple-100 text-purple-700",
+  PATIENT_UPDATED: "bg-indigo-100 text-indigo-700",
+  PATIENT_DELETED: "bg-red-100 text-red-700",
+  APPOINTMENT_CREATED: "bg-cyan-100 text-cyan-700",
+  APPOINTMENT_UPDATED: "bg-teal-100 text-teal-700",
+  APPOINTMENT_DELETED: "bg-red-100 text-red-700",
+  PAYMENT_CREATED: "bg-emerald-100 text-emerald-700",
+  MESSAGE_SENT: "bg-sky-100 text-sky-700",
 };
 
 export default function ActivityLogsPage() {
-  const [logs, setLogs] = useState<ActivityLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { showToast } = useToast();
+  const [logs, setLogs] = useState<Log[]>([]);
+  const [count, setCount] = useState(0);
+  const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
-  const [actionFilter, setActionFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
+  const [loading, setLoading] = useState(true);
 
-  const fetch = useCallback(async () => {
-    setLoading(true); setError("");
+  const load = useCallback(async () => {
+    setLoading(true);
     try {
-      const params: Record<string, unknown> = { page };
-      if (search) params.search = search;
-      if (actionFilter) params.action = actionFilter;
-      if (dateFrom) params.date_from = dateFrom;
-      if (dateTo) params.date_to = dateTo;
-      const { data } = await activityLogsAPI.getAll(params);
-      setLogs(data.results ?? data);
-      setTotalPages(data.total_pages ?? 1);
-      setTotalCount(data.count ?? (data.results ?? data).length);
-    } catch (err) { setError(extractError(err)); }
+      const { data } = await activityLogsAPI.getAll({
+        page,
+        search: search || undefined,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+      });
+      setLogs(data.results ?? []);
+      setCount(data.count ?? 0);
+    } catch (err) { showToast(extractError(err), "error"); }
     finally { setLoading(false); }
-  }, [page, search, actionFilter, dateFrom, dateTo]);
+  }, [page, search, dateFrom, dateTo, showToast]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => { load(); }, [load]);
 
-  const columns: Column<ActivityLog>[] = [
-    { key: "id", header: "#", render: (r) => <span className="text-xs text-gray-400">{r.id}</span> },
-    {
-      key: "user", header: "User",
-      render: (r) => (
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-            <FiUser className="w-3 h-3 text-blue-600" />
-          </div>
-          <span className="text-sm font-medium">{r.user}</span>
-        </div>
-      ),
-    },
+  const columns = [
     {
       key: "action", header: "Action",
-      render: (r) => (
-        <span className={`badge border ${ACTION_COLORS[r.action?.toLowerCase()] ?? "bg-gray-100 text-gray-600 border-gray-200"}`}>
+      render: (r: Log) => (
+        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${ACTION_COLORS[r.action] ?? "bg-gray-100 text-gray-600"}`}>
           {r.action}
         </span>
       ),
     },
-    {
-      key: "description", header: "Description",
-      render: (r) => <span className="text-sm text-gray-600 line-clamp-2 max-w-xs">{r.description || "—"}</span>,
-    },
-    {
-      key: "ip_address", header: "IP Address",
-      render: (r) => (
-        <div className="flex items-center gap-1 text-xs text-gray-500">
-          <FiMonitor className="w-3 h-3" />
-          {r.ip_address || "—"}
-        </div>
-      ),
-    },
-    {
-      key: "created_at", header: "Date & Time",
-      render: (r) => (
-        <div className="flex items-center gap-1 text-xs text-gray-500">
-          <FiClock className="w-3 h-3" />
-          {formatDateTime(r.created_at)}
-        </div>
-      ),
-    },
+    { key: "user_name", header: "User", render: (r: Log) => <span>{r.user_name ?? "—"}<br /><span className="text-xs text-gray-400">{r.user_email}</span></span> },
+    { key: "description", header: "Description", render: (r: Log) => <span className="text-xs text-gray-600">{r.description}</span> },
+    { key: "ip_address", header: "IP Address", render: (r: Log) => r.ip_address ?? "—" },
+    { key: "created_at", header: "Date & Time", render: (r: Log) => formatDateTime(r.created_at) },
   ];
 
   return (
-    <AuthGuard requiredRole="admin">
-      <PageLayout role="admin" title="Activity Logs">
-        <div className="page-header">
-          <div>
-            <h2 className="page-title">Activity Logs</h2>
-            <p className="page-subtitle">Track all system actions and user activity.</p>
+    <PageLayout title="Activity Logs">
+      <div className="p-6">
+        <div className="flex flex-wrap gap-3 mb-4">
+          <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search action, user…" />
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">From</label>
+            <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
-            <FiList className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-medium text-blue-800">{totalCount} records</span>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">To</label>
+            <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
+          {(dateFrom || dateTo) && (
+            <button onClick={() => { setDateFrom(""); setDateTo(""); }} className="text-sm text-blue-600 hover:underline">Clear dates</button>
+          )}
         </div>
-
-        <div className="card mb-5">
-          <div className="flex flex-wrap gap-3">
-            <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search by user or description…" className="flex-1 min-w-48" />
-            <FilterSelect value={actionFilter} options={ACTION_OPTS} onChange={(v) => { setActionFilter(v); setPage(1); }} className="w-40" />
-            <div className="flex items-center gap-2">
-              <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-                className="input h-10 w-38" title="From date" />
-              <span className="text-gray-400 text-sm">to</span>
-              <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-                className="input h-10 w-38" title="To date" />
-            </div>
-            {(search || actionFilter || dateFrom || dateTo) && (
-              <button onClick={() => { setSearch(""); setActionFilter(""); setDateFrom(""); setDateTo(""); setPage(1); }}
-                className="btn-secondary btn-sm h-10">
-                Clear
-              </button>
-            )}
-          </div>
-        </div>
-
-        {error ? <ErrorMessage message={error} onRetry={fetch} /> : (
-          <div className="card">
-            <DataTable
-              columns={columns} data={logs} loading={loading} keyExtractor={(r) => r.id}
-              page={page} totalPages={totalPages} totalCount={totalCount} onPageChange={setPage}
-              emptyMessage="No activity logs found." />
-          </div>
-        )}
-      </PageLayout>
-    </AuthGuard>
+        <DataTable columns={columns} data={logs} loading={loading}
+          pagination={{ page, totalCount: count, pageSize: 20, onPageChange: setPage }} />
+      </div>
+    </PageLayout>
   );
 }

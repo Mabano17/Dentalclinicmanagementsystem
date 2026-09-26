@@ -1,196 +1,131 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import Link from "next/link";
-import { FiPlus, FiEye } from "react-icons/fi";
 import PageLayout from "@/components/PageLayout";
-import AuthGuard from "@/components/AuthGuard";
-import DataTable, { Column } from "@/components/DataTable";
-import SearchBar from "@/components/SearchBar";
-import { FilterSelect } from "@/components/Filter";
+import DataTable from "@/components/DataTable";
 import Modal from "@/components/Modal";
-import ErrorMessage from "@/components/ErrorMessage";
-import { useToast } from "@/components/Toast";
+import ConfirmDialog from "@/components/ConfirmDialog";
+import { FilterSelect } from "@/components/Filter";
 import { appointmentsAPI } from "@/lib/api";
 import { formatDate, formatTime, getStatusColor, extractError } from "@/lib/utils";
+import { useToast } from "@/components/Toast";
 
 interface Appointment {
-  id: number;
-  dentist_name: string;
-  service_name: string;
-  date: string;
-  time: string;
-  status: string;
+  id: string;
+  dentist_details: { full_name: string; specialization: string };
+  service_details: { name: string; price: string } | null;
+  appointment_date: string;
+  appointment_time: string;
   reason: string;
+  status: string;
+  notes: string;
 }
-
-const STATUS_OPTIONS = [
-  { label: "All Statuses", value: "" },
-  { label: "Pending", value: "pending" },
-  { label: "Confirmed", value: "confirmed" },
-  { label: "Completed", value: "completed" },
-  { label: "Cancelled", value: "cancelled" },
-];
 
 export default function PatientAppointmentsPage() {
   const { showToast } = useToast();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [count, setCount] = useState(0);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Appointment | null>(null);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [cancelId, setCancelId] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
-  const fetchAppointments = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true);
-    setError("");
     try {
-      const params: Record<string, unknown> = { page };
-      if (search) params.search = search;
-      if (statusFilter) params.status = statusFilter;
-      const { data } = await appointmentsAPI.getAll(params);
-      setAppointments(data.results ?? data);
-      setTotalPages(data.total_pages ?? 1);
-      setTotalCount(data.count ?? (data.results ?? data).length);
-    } catch (err) {
-      setError(extractError(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [page, search, statusFilter]);
+      const { data } = await appointmentsAPI.getAll({
+        page, status: statusFilter || undefined,
+      });
+      setAppointments(data.results ?? []);
+      setCount(data.count ?? 0);
+    } catch (err) { showToast(extractError(err), "error"); }
+    finally { setLoading(false); }
+  }, [page, statusFilter, showToast]);
 
-  useEffect(() => { fetchAppointments(); }, [fetchAppointments]);
+  useEffect(() => { load(); }, [load]);
 
-  const handleCancel = async (id: number) => {
+  const handleCancel = async () => {
+    if (!cancelId) return;
+    setCancelling(true);
     try {
-      await appointmentsAPI.cancel(id);
+      await appointmentsAPI.cancel(cancelId);
       showToast("Appointment cancelled.", "success");
-      fetchAppointments();
-      setSelected(null);
-    } catch (err) {
-      showToast(extractError(err), "error");
-    }
+      setCancelId(null);
+      load();
+    } catch (err) { showToast(extractError(err), "error"); }
+    finally { setCancelling(false); }
   };
 
-  const columns: Column<Appointment>[] = [
-    { key: "id", header: "ID", render: (row) => <span className="text-gray-400 text-xs">#{row.id}</span> },
-    { key: "service_name", header: "Service", render: (row) => <span className="font-medium">{row.service_name}</span> },
-    { key: "dentist_name", header: "Dentist", render: (row) => `Dr. ${row.dentist_name}` },
-    { key: "date", header: "Date", render: (row) => formatDate(row.date) },
-    { key: "time", header: "Time", render: (row) => formatTime(row.time) },
+  const columns = [
+    { key: "dentist", header: "Dentist", render: (r: Appointment) => `Dr. ${r.dentist_details?.full_name ?? "—"}` },
+    { key: "service", header: "Service", render: (r: Appointment) => r.service_details?.name ?? "—" },
+    { key: "date", header: "Date", render: (r: Appointment) => formatDate(r.appointment_date) },
+    { key: "time", header: "Time", render: (r: Appointment) => formatTime(r.appointment_time) },
     {
-      key: "status",
-      header: "Status",
-      render: (row) => (
-        <span className={`badge ${getStatusColor(row.status)}`}>{row.status}</span>
+      key: "status", header: "Status",
+      render: (r: Appointment) => (
+        <span className={`px-2 py-0.5 text-xs font-medium rounded-full border ${getStatusColor(r.status)}`}>{r.status}</span>
       ),
     },
     {
-      key: "actions",
-      header: "Actions",
-      render: (row) => (
-        <button
-          onClick={() => setSelected(row)}
-          className="btn-secondary btn-sm"
-        >
-          <FiEye className="w-3.5 h-3.5" /> View
-        </button>
+      key: "actions", header: "Actions",
+      render: (r: Appointment) => (
+        <div className="flex gap-1">
+          <button onClick={() => { setSelected(r); setViewOpen(true); }} className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100">View</button>
+          {["PENDING", "CONFIRMED"].includes(r.status) && (
+            <button onClick={() => setCancelId(r.id)} className="px-2 py-1 text-xs bg-red-50 text-red-700 rounded hover:bg-red-100">Cancel</button>
+          )}
+        </div>
       ),
     },
   ];
 
   return (
-    <AuthGuard requiredRole="patient">
-      <PageLayout role="patient" title="My Appointments">
-        <div className="page-header">
-          <div>
-            <h2 className="page-title">My Appointments</h2>
-            <p className="page-subtitle">Track your dental appointment history and status.</p>
-          </div>
-          <Link href="/patient/book-appointment" className="btn-primary">
-            <FiPlus className="w-4 h-4" /> Book Appointment
-          </Link>
+    <PageLayout title="My Appointments">
+      <div className="p-6">
+        <div className="flex gap-3 mb-4 justify-between">
+          <FilterSelect label="Status" value={statusFilter} onChange={(v) => { setStatusFilter(v); setPage(1); }}
+            options={[
+              { value: "", label: "All" },
+              { value: "PENDING", label: "Pending" },
+              { value: "CONFIRMED", label: "Confirmed" },
+              { value: "COMPLETED", label: "Completed" },
+              { value: "CANCELLED", label: "Cancelled" },
+            ]} />
+          <a href="/patient/book-appointment" className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">+ Book Appointment</a>
         </div>
+        <DataTable columns={columns} data={appointments} loading={loading}
+          pagination={{ page, totalCount: count, pageSize: 20, onPageChange: setPage }} />
+      </div>
 
-        {/* Filters */}
-        <div className="card mb-5">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <SearchBar
-              value={search}
-              onChange={(v) => { setSearch(v); setPage(1); }}
-              placeholder="Search by service or dentist…"
-              className="flex-1"
-            />
-            <FilterSelect
-              value={statusFilter}
-              options={STATUS_OPTIONS}
-              onChange={(v) => { setStatusFilter(v); setPage(1); }}
-              placeholder="All Statuses"
-              className="w-44"
-            />
-          </div>
-        </div>
-
-        {error ? (
-          <ErrorMessage message={error} onRetry={fetchAppointments} />
-        ) : (
-          <div className="card">
-            <DataTable
-              columns={columns}
-              data={appointments}
-              loading={loading}
-              keyExtractor={(row) => row.id}
-              page={page}
-              totalPages={totalPages}
-              totalCount={totalCount}
-              onPageChange={setPage}
-              emptyMessage="No appointments found."
-            />
+      <Modal open={viewOpen} onClose={() => setViewOpen(false)} title="Appointment Details" size="md">
+        {selected && (
+          <div className="space-y-2 text-sm">
+            {[
+              ["Dentist", `Dr. ${selected.dentist_details?.full_name}`],
+              ["Service", selected.service_details?.name ?? "—"],
+              ["Date", formatDate(selected.appointment_date)],
+              ["Time", formatTime(selected.appointment_time)],
+              ["Status", selected.status],
+              ["Reason", selected.reason || "—"],
+              ["Notes", selected.notes || "—"],
+            ].map(([l, v]) => (
+              <div key={l} className="flex gap-2">
+                <span className="font-medium text-gray-500 w-20 flex-shrink-0">{l}:</span>
+                <span className="text-gray-800">{v}</span>
+              </div>
+            ))}
           </div>
         )}
+      </Modal>
 
-        {/* Detail Modal */}
-        <Modal
-          isOpen={!!selected}
-          onClose={() => setSelected(null)}
-          title={`Appointment #${selected?.id}`}
-          footer={
-            selected?.status === "pending" || selected?.status === "confirmed" ? (
-              <button
-                onClick={() => selected && handleCancel(selected.id)}
-                className="btn-danger"
-              >
-                Cancel Appointment
-              </button>
-            ) : undefined
-          }
-        >
-          {selected && (
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { label: "Service", value: selected.service_name },
-                { label: "Dentist", value: `Dr. ${selected.dentist_name}` },
-                { label: "Date", value: formatDate(selected.date) },
-                { label: "Time", value: formatTime(selected.time) },
-                { label: "Status", value: selected.status },
-                { label: "Reason", value: selected.reason || "—" },
-              ].map(({ label, value }) => (
-                <div key={label}>
-                  <p className="text-xs text-gray-400 mb-0.5">{label}</p>
-                  {label === "Status" ? (
-                    <span className={`badge ${getStatusColor(value)}`}>{value}</span>
-                  ) : (
-                    <p className="text-sm font-medium text-gray-900">{value}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </Modal>
-      </PageLayout>
-    </AuthGuard>
+      <ConfirmDialog open={!!cancelId} title="Cancel Appointment"
+        message="Are you sure you want to cancel this appointment?"
+        variant="danger" loading={cancelling}
+        onConfirm={handleCancel} onCancel={() => setCancelId(null)} />
+    </PageLayout>
   );
 }

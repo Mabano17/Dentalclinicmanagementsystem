@@ -1,245 +1,192 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { FiPlus, FiMail, FiSend } from "react-icons/fi";
 import PageLayout from "@/components/PageLayout";
-import AuthGuard from "@/components/AuthGuard";
 import Modal from "@/components/Modal";
 import MessagePanel from "@/components/MessagePanel";
-import SearchBar from "@/components/SearchBar";
-import Loading from "@/components/Loading";
-import ErrorMessage from "@/components/ErrorMessage";
+import { messagesAPI, authAPI } from "@/lib/api";
+import { formatDateTime, extractError } from "@/lib/utils";
+import { getUser } from "@/lib/auth";
 import { useToast } from "@/components/Toast";
-import { messagesAPI } from "@/lib/api";
-import { formatDateTime, getStatusColor, extractError, truncate } from "@/lib/utils";
-
-interface Thread {
-  id: number;
-  subject: string;
-  last_message: string;
-  last_message_at: string;
-  is_read: boolean;
-  unread_count: number;
-  messages?: Message[];
-}
 
 interface Message {
-  id: number;
+  id: string;
+  sender: string;
   sender_name: string;
-  sender_role: "admin" | "patient";
-  content: string;
-  created_at: string;
+  receiver: string;
+  receiver_name: string;
+  subject: string;
+  body: string;
   is_read: boolean;
+  created_at: string;
 }
+
+interface AdminUser { id: string; full_name: string; email: string }
 
 export default function PatientMessagesPage() {
   const { showToast } = useToast();
-  const [threads, setThreads] = useState<Thread[]>([]);
+  const me = getUser();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [selected, setSelected] = useState<Message | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [activeThread, setActiveThread] = useState<Thread | null>(null);
-  const [threadMessages, setThreadMessages] = useState<Message[]>([]);
-  const [loadingMessages, setLoadingMessages] = useState(false);
-  const [showNewModal, setShowNewModal] = useState(false);
-  const [newSubject, setNewSubject] = useState("");
-  const [newMessage, setNewMessage] = useState("");
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [admins, setAdmins] = useState<AdminUser[]>([]);
+  const [newMsg, setNewMsg] = useState({ receiver: "", subject: "", body: "" });
   const [sending, setSending] = useState(false);
 
-  const fetchThreads = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true);
-    setError("");
     try {
-      const params: Record<string, unknown> = {};
-      if (search) params.search = search;
-      const { data } = await messagesAPI.getAll(params);
-      setThreads(data.results ?? data);
-    } catch (err) {
-      setError(extractError(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [search]);
+      const { data } = await messagesAPI.getAll({ page_size: 100 });
+      setMessages(data.results ?? []);
+    } catch (err) { showToast(extractError(err), "error"); }
+    finally { setLoading(false); }
+  }, [showToast]);
 
-  useEffect(() => { fetchThreads(); }, [fetchThreads]);
+  useEffect(() => { load(); }, [load]);
 
-  const openThread = async (thread: Thread) => {
-    setActiveThread(thread);
-    setLoadingMessages(true);
-    try {
-      const { data } = await messagesAPI.getOne(thread.id);
-      setThreadMessages(data.messages ?? []);
-      // Mark as read
-      if (!thread.is_read) {
-        await messagesAPI.markRead(thread.id);
-        fetchThreads();
-      }
-    } catch {
-      showToast("Failed to load messages.", "error");
-    } finally {
-      setLoadingMessages(false);
+  const openMessage = async (msg: Message) => {
+    setSelected(msg);
+    if (!msg.is_read && msg.receiver === me?.id) {
+      try { await messagesAPI.markRead(msg.id); load(); } catch { /* ignore */ }
     }
   };
 
-  const handleSendNew = async () => {
-    if (!newSubject.trim() || !newMessage.trim()) {
-      showToast("Subject and message are required.", "warning");
-      return;
-    }
+  const handleSend = async () => {
+    if (!newMsg.receiver || !newMsg.body.trim()) return;
     setSending(true);
     try {
-      await messagesAPI.send({ subject: newSubject, content: newMessage });
-      showToast("Message sent successfully.", "success");
-      setShowNewModal(false);
-      setNewSubject("");
-      setNewMessage("");
-      fetchThreads();
-    } catch (err) {
-      showToast(extractError(err), "error");
-    } finally {
-      setSending(false);
-    }
+      await messagesAPI.send(newMsg);
+      showToast("Message sent.", "success");
+      setComposeOpen(false);
+      setNewMsg({ receiver: "", subject: "", body: "" });
+      load();
+    } catch (err) { showToast(extractError(err), "error"); }
+    finally { setSending(false); }
+  };
+
+  // Load admin users when composing
+  const openCompose = async () => {
+    try {
+      const { data } = await authAPI.getProfile();
+      // We need to find admins to message — fetch from patients endpoint workaround
+      // In practice the admin's UUID is stored in received messages
+      const adminIds = new Set(messages.map((m) => m.sender === me?.id ? m.receiver : m.sender));
+      const adminList = messages
+        .filter((m) => adminIds.has(m.sender !== me?.id ? m.sender : m.receiver))
+        .map((m) => m.sender !== me?.id
+          ? { id: m.sender, full_name: m.sender_name, email: "" }
+          : { id: m.receiver, full_name: m.receiver_name, email: "" }
+        );
+      // Deduplicate
+      const seen = new Set<string>();
+      const unique = adminList.filter((a) => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
+      setAdmins(unique);
+    } catch { /* ignore */ }
+    setComposeOpen(true);
   };
 
   return (
-    <AuthGuard requiredRole="patient">
-      <PageLayout role="patient" title="Messages">
-        <div className="page-header">
-          <div>
-            <h2 className="page-title">Messages</h2>
-            <p className="page-subtitle">Communicate with our clinic team.</p>
+    <PageLayout title="Messages">
+      <div className="p-6 h-[calc(100vh-120px)] flex gap-4">
+        {/* Thread list */}
+        <div className="w-72 flex-shrink-0 bg-white rounded-xl border border-gray-200 flex flex-col">
+          <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+            <span className="font-semibold text-gray-700 text-sm">Messages</span>
+            <button onClick={openCompose} className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700">+ New</button>
           </div>
-          <button
-            onClick={() => setShowNewModal(true)}
-            className="btn-primary"
-          >
-            <FiPlus className="w-4 h-4" /> New Message
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 h-[calc(100vh-220px)]">
-          {/* Thread list */}
-          <div className="card flex flex-col gap-3 overflow-hidden">
-            <SearchBar
-              value={search}
-              onChange={(v) => setSearch(v)}
-              placeholder="Search messages…"
-            />
-            <div className="flex-1 overflow-y-auto flex flex-col gap-2">
-              {loading ? (
-                <Loading size="sm" message="Loading…" />
-              ) : error ? (
-                <ErrorMessage message={error} onRetry={fetchThreads} />
-              ) : threads.length === 0 ? (
-                <div className="text-center py-8">
-                  <FiMail className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-400">No messages yet.</p>
-                </div>
-              ) : (
-                threads.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => openThread(t)}
-                    className={`w-full text-left p-3 rounded-xl border transition-all ${
-                      activeThread?.id === t.id
-                        ? "border-blue-500 bg-blue-50"
-                        : "border-gray-100 hover:border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className={`text-sm truncate ${!t.is_read ? "font-semibold text-gray-900" : "text-gray-700"}`}>
-                        {t.subject}
-                      </p>
-                      {t.unread_count > 0 && (
-                        <span className="flex-shrink-0 w-5 h-5 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center font-medium">
-                          {t.unread_count}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-400 mt-0.5 truncate">{truncate(t.last_message, 50)}</p>
-                    <p className="text-xs text-gray-300 mt-1">{formatDateTime(t.last_message_at)}</p>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Message panel */}
-          <div className="lg:col-span-2 card flex flex-col overflow-hidden">
-            {activeThread ? (
-              <>
-                <div className="border-b border-gray-100 pb-3 mb-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-gray-900">{activeThread.subject}</h3>
-                    <span className={`badge ${getStatusColor(activeThread.is_read ? "read" : "unread")}`}>
-                      {activeThread.is_read ? "Read" : "Unread"}
-                    </span>
-                  </div>
-                </div>
-                {loadingMessages ? (
-                  <Loading size="sm" message="Loading messages…" />
-                ) : (
-                  <MessagePanel
-                    messages={threadMessages}
-                    threadId={activeThread.id}
-                    onMessageSent={() => openThread(activeThread)}
-                    currentRole="patient"
-                  />
-                )}
-              </>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center gap-3">
-                <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center">
-                  <FiMail className="w-8 h-8 text-gray-400" />
-                </div>
-                <p className="text-gray-500 text-sm">Select a message thread to view the conversation.</p>
-                <button onClick={() => setShowNewModal(true)} className="btn-outline btn-sm">
-                  <FiSend className="w-3.5 h-3.5" /> Send a Message
-                </button>
+          <div className="flex-1 overflow-y-auto">
+            {loading ? (
+              <p className="p-4 text-sm text-gray-400">Loading…</p>
+            ) : messages.length === 0 ? (
+              <div className="p-4 text-center">
+                <p className="text-sm text-gray-400 mb-2">No messages yet.</p>
+                <button onClick={openCompose} className="text-sm text-blue-600 hover:underline">Send your first message</button>
               </div>
+            ) : (
+              messages.map((msg) => {
+                const isUnread = !msg.is_read && msg.receiver === me?.id;
+                return (
+                  <button key={msg.id} onClick={() => openMessage(msg)}
+                    className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors ${selected?.id === msg.id ? "bg-blue-50" : ""}`}>
+                    <div className="flex justify-between items-center">
+                      <span className={`text-sm truncate ${isUnread ? "font-bold text-gray-900" : "text-gray-700"}`}>
+                        {msg.sender === me?.id ? `To: ${msg.receiver_name}` : msg.sender_name}
+                      </span>
+                      {isUnread && <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />}
+                    </div>
+                    <p className="text-xs text-gray-500 truncate">{msg.subject || "(No subject)"}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{formatDateTime(msg.created_at)}</p>
+                  </button>
+                );
+              })
             )}
           </div>
         </div>
 
-        {/* New message modal */}
-        <Modal
-          isOpen={showNewModal}
-          onClose={() => setShowNewModal(false)}
-          title="New Message"
-          footer={
-            <button onClick={handleSendNew} disabled={sending} className="btn-primary">
-              {sending ? (
-                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <><FiSend className="w-4 h-4" /> Send Message</>
-              )}
-            </button>
-          }
-        >
-          <div className="flex flex-col gap-4">
-            <div className="form-group">
-              <label className="label">Subject</label>
-              <input
-                type="text"
-                value={newSubject}
-                onChange={(e) => setNewSubject(e.target.value)}
-                placeholder="e.g. Question about my appointment"
-                className="input"
-              />
+        {/* Message body */}
+        <div className="flex-1 bg-white rounded-xl border border-gray-200 flex flex-col">
+          {selected ? (
+            <>
+              <div className="p-4 border-b border-gray-100">
+                <h3 className="font-semibold text-gray-800">{selected.subject || "(No subject)"}</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {selected.sender === me?.id ? `To: ${selected.receiver_name}` : `From: ${selected.sender_name}`}
+                  <span className="ml-2">{formatDateTime(selected.created_at)}</span>
+                </p>
+              </div>
+              <MessagePanel
+                messages={[{ id: selected.id, sender_name: selected.sender_name, body: selected.body, created_at: selected.created_at, is_mine: selected.sender === me?.id }]}
+                onSend={() => {}} showInput={false} />
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+              <span className="text-4xl mb-3">💬</span>
+              <p className="text-sm">Select a message or compose a new one</p>
+              <button onClick={openCompose} className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Compose</button>
             </div>
-            <div className="form-group">
-              <label className="label">Message</label>
-              <textarea
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Write your message here…"
-                rows={5}
-                className="input resize-none"
-              />
-            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Compose modal */}
+      <Modal open={composeOpen} onClose={() => setComposeOpen(false)} title="New Message" size="md">
+        <div className="space-y-3 text-sm">
+          <div>
+            <label className="block font-medium text-gray-700 mb-1">To (Admin)</label>
+            {admins.length > 0 ? (
+              <select value={newMsg.receiver} onChange={(e) => setNewMsg((p) => ({ ...p, receiver: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Select admin…</option>
+                {admins.map((a) => <option key={a.id} value={a.id}>{a.full_name}</option>)}
+              </select>
+            ) : (
+              <input type="text" value={newMsg.receiver} onChange={(e) => setNewMsg((p) => ({ ...p, receiver: e.target.value }))}
+                placeholder="Admin user UUID"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            )}
           </div>
-        </Modal>
-      </PageLayout>
-    </AuthGuard>
+          <div>
+            <label className="block font-medium text-gray-700 mb-1">Subject</label>
+            <input type="text" value={newMsg.subject} onChange={(e) => setNewMsg((p) => ({ ...p, subject: e.target.value }))}
+              placeholder="What's this about?"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block font-medium text-gray-700 mb-1">Message</label>
+            <textarea rows={5} value={newMsg.body} onChange={(e) => setNewMsg((p) => ({ ...p, body: e.target.value }))}
+              placeholder="Type your message…"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setComposeOpen(false)} className="px-4 py-2 border border-gray-300 rounded-lg">Cancel</button>
+            <button onClick={handleSend} disabled={sending || !newMsg.body.trim()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-300">
+              {sending ? "Sending…" : "Send"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </PageLayout>
   );
 }

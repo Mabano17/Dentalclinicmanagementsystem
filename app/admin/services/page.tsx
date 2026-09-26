@@ -1,22 +1,17 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { FiPlus, FiEdit2, FiTrash2 } from "react-icons/fi";
-import { MdOutlineMedicalServices } from "react-icons/md";
 import PageLayout from "@/components/PageLayout";
-import AuthGuard from "@/components/AuthGuard";
-import DataTable, { Column } from "@/components/DataTable";
-import SearchBar from "@/components/SearchBar";
-import { FilterSelect } from "@/components/Filter";
+import DataTable from "@/components/DataTable";
 import Modal from "@/components/Modal";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import ErrorMessage from "@/components/ErrorMessage";
-import { useToast } from "@/components/Toast";
+import SearchBar from "@/components/SearchBar";
 import { servicesAPI } from "@/lib/api";
 import { formatCurrency, getStatusColor, extractError } from "@/lib/utils";
+import { useToast } from "@/components/Toast";
 
 interface Service {
-  id: number;
+  id: string;
   name: string;
   description: string;
   price: string;
@@ -24,165 +19,143 @@ interface Service {
   status: string;
 }
 
+const blank = (): Partial<Service> => ({
+  name: "", description: "", price: "", duration_minutes: 30, status: "ACTIVE",
+});
+
 const PRESET_SERVICES = [
   "Dental Check-up", "Dental Cleaning", "Tooth Extraction",
   "Dental Filling", "Root Canal Treatment", "Teeth Whitening", "Braces Consultation",
 ];
 
-const EMPTY: Omit<Service, "id"> = {
-  name: "", description: "", price: "", duration_minutes: 30, status: "active",
-};
-
-const STATUS_OPTS = [{ label: "All", value: "" }, { label: "Active", value: "active" }, { label: "Inactive", value: "inactive" }];
-
 export default function AdminServicesPage() {
   const { showToast } = useToast();
   const [services, setServices] = useState<Service[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [count, setCount] = useState(0);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
-  const [modalMode, setModalMode] = useState<"add" | "edit" | null>(null);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [mode, setMode] = useState<"add" | "edit" | null>(null);
   const [selected, setSelected] = useState<Service | null>(null);
-  const [form, setForm] = useState<Omit<Service, "id">>(EMPTY);
+  const [form, setForm] = useState<Partial<Service>>(blank());
   const [saving, setSaving] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Service | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const fetch = useCallback(async () => {
-    setLoading(true); setError("");
+  const load = useCallback(async () => {
+    setLoading(true);
     try {
-      const params: Record<string, unknown> = { page };
-      if (search) params.search = search;
-      if (statusFilter) params.status = statusFilter;
-      const { data } = await servicesAPI.getAll(params);
-      setServices(data.results ?? data);
-      setTotalPages(data.total_pages ?? 1);
-      setTotalCount(data.count ?? (data.results ?? data).length);
-    } catch (err) { setError(extractError(err)); }
+      const { data } = await servicesAPI.getAll({ page, search: search || undefined });
+      setServices(data.results ?? []);
+      setCount(data.count ?? 0);
+    } catch (err) { showToast(extractError(err), "error"); }
     finally { setLoading(false); }
-  }, [page, search, statusFilter]);
+  }, [page, search, showToast]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => { load(); }, [load]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      if (modalMode === "add") { await servicesAPI.create(form); showToast("Service added.", "success"); }
-      else if (modalMode === "edit" && selected) { await servicesAPI.update(selected.id, form); showToast("Service updated.", "success"); }
-      setModalMode(null); fetch();
+      if (mode === "add") { await servicesAPI.create(form); showToast("Service created.", "success"); }
+      else if (mode === "edit" && selected) { await servicesAPI.patch(selected.id, form); showToast("Service updated.", "success"); }
+      setMode(null); load();
     } catch (err) { showToast(extractError(err), "error"); }
     finally { setSaving(false); }
   };
 
   const handleDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteId) return;
     setDeleting(true);
     try {
-      await servicesAPI.delete(deleteTarget.id);
+      await servicesAPI.delete(deleteId);
       showToast("Service deleted.", "success");
-      setDeleteTarget(null); fetch();
+      setDeleteId(null); load();
     } catch (err) { showToast(extractError(err), "error"); }
     finally { setDeleting(false); }
   };
 
-  const columns: Column<Service>[] = [
-    {
-      key: "name", header: "Service",
-      render: (r) => (
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center">
-            <MdOutlineMedicalServices className="w-4 h-4 text-indigo-600" />
-          </div>
-          <p className="font-medium text-sm">{r.name}</p>
-        </div>
-      ),
-    },
-    { key: "description", header: "Description", render: (r) => <span className="text-gray-500 text-xs line-clamp-2 max-w-xs">{r.description || "—"}</span> },
-    { key: "price", header: "Price", render: (r) => <span className="font-semibold text-green-700">{formatCurrency(Number(r.price))}</span> },
-    { key: "duration_minutes", header: "Duration", render: (r) => `${r.duration_minutes} min` },
-    { key: "status", header: "Status", render: (r) => <span className={`badge ${getStatusColor(r.status)}`}>{r.status}</span> },
-    {
-      key: "actions", header: "Actions",
-      render: (r) => (
+  const f = (k: keyof Service) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+    setForm((p) => ({ ...p, [k]: e.target.value }));
+
+  const columns = [
+    { key: "name", header: "Service Name", render: (r: Service) => r.name },
+    { key: "price", header: "Price", render: (r: Service) => formatCurrency(r.price) },
+    { key: "duration_minutes", header: "Duration", render: (r: Service) => `${r.duration_minutes} min` },
+    { key: "status", header: "Status", render: (r: Service) => (
+        <span className={`px-2 py-0.5 text-xs font-medium rounded-full border ${getStatusColor(r.status)}`}>{r.status}</span>
+    )},
+    { key: "actions", header: "Actions", render: (r: Service) => (
         <div className="flex gap-1">
-          <button onClick={() => { setForm({ ...r }); setSelected(r); setModalMode("edit"); }} className="btn-secondary btn-sm p-1.5"><FiEdit2 className="w-3.5 h-3.5" /></button>
-          <button onClick={() => setDeleteTarget(r)} className="btn-danger btn-sm p-1.5"><FiTrash2 className="w-3.5 h-3.5" /></button>
+          <button onClick={() => { setSelected(r); setForm({ ...r }); setMode("edit"); }} className="px-2 py-1 text-xs bg-yellow-50 text-yellow-700 rounded hover:bg-yellow-100">Edit</button>
+          <button onClick={() => setDeleteId(r.id)} className="px-2 py-1 text-xs bg-red-50 text-red-700 rounded hover:bg-red-100">Delete</button>
         </div>
-      ),
-    },
+    )},
   ];
 
   return (
-    <AuthGuard requiredRole="admin">
-      <PageLayout role="admin" title="Services">
-        <div className="page-header">
-          <div><h2 className="page-title">Dental Services</h2><p className="page-subtitle">Manage clinic service offerings and pricing.</p></div>
-          <button onClick={() => { setForm(EMPTY); setSelected(null); setModalMode("add"); }} className="btn-primary">
-            <FiPlus className="w-4 h-4" /> Add Service
-          </button>
+    <PageLayout title="Services">
+      <div className="p-6">
+        <div className="flex gap-3 mb-4 justify-between">
+          <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search services…" />
+          <button onClick={() => { setForm(blank()); setMode("add"); }} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">+ Add Service</button>
         </div>
+        <DataTable columns={columns} data={services} loading={loading}
+          pagination={{ page, totalCount: count, pageSize: 20, onPageChange: setPage }} />
+      </div>
 
-        <div className="card mb-5 flex flex-col sm:flex-row gap-3">
-          <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search services…" className="flex-1" />
-          <FilterSelect value={statusFilter} options={STATUS_OPTS} onChange={(v) => { setStatusFilter(v); setPage(1); }} className="w-36" />
-        </div>
-
-        {error ? <ErrorMessage message={error} onRetry={fetch} /> : (
-          <div className="card">
-            <DataTable columns={columns} data={services} loading={loading} keyExtractor={(r) => r.id}
-              page={page} totalPages={totalPages} totalCount={totalCount} onPageChange={setPage} emptyMessage="No services found." />
-          </div>
-        )}
-
-        <Modal isOpen={!!modalMode} onClose={() => setModalMode(null)}
-          title={modalMode === "add" ? "Add Service" : "Edit Service"}
-          footer={<><button onClick={() => setModalMode(null)} className="btn-secondary">Cancel</button>
-            <button onClick={handleSave} disabled={saving} className="btn-primary">
-              {saving ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : "Save"}
-            </button></>}>
-          <div className="flex flex-col gap-4">
-            <div className="form-group">
-              <label className="label">Service Name</label>
-              {modalMode === "add" ? (
-                <select value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} className="input">
-                  <option value="">Select or type a service name</option>
-                  {PRESET_SERVICES.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-              ) : (
-                <input type="text" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} className="input" />
-              )}
-            </div>
-            <div className="form-group">
-              <label className="label">Description</label>
-              <textarea value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} rows={3} className="input resize-none" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="form-group">
-                <label className="label">Price (₱)</label>
-                <input type="number" min="0" step="0.01" value={form.price} onChange={(e) => setForm((p) => ({ ...p, price: e.target.value }))} className="input" placeholder="0.00" />
-              </div>
-              <div className="form-group">
-                <label className="label">Duration (minutes)</label>
-                <input type="number" min="5" step="5" value={form.duration_minutes} onChange={(e) => setForm((p) => ({ ...p, duration_minutes: Number(e.target.value) }))} className="input" />
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="label">Status</label>
-              <select value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))} className="input">
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
+      <Modal open={!!mode} onClose={() => setMode(null)}
+        title={mode === "add" ? "Add Service" : "Edit Service"} size="md">
+        <div className="space-y-3 text-sm">
+          <div>
+            <label className="block font-medium text-gray-700 mb-1">Service Name</label>
+            {mode === "add" ? (
+              <select value={form.name ?? ""} onChange={(e) => { f("name")(e); }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Select or type…</option>
+                {PRESET_SERVICES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
+            ) : (
+              <input type="text" value={form.name ?? ""} onChange={f("name")}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            )}
+          </div>
+          <div>
+            <label className="block font-medium text-gray-700 mb-1">Description</label>
+            <textarea rows={3} value={form.description ?? ""} onChange={f("description")}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-medium text-gray-700 mb-1">Price (₱)</label>
+              <input type="number" min="0" step="0.01" value={form.price ?? ""} onChange={f("price")}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block font-medium text-gray-700 mb-1">Duration (minutes)</label>
+              <input type="number" min="1" value={form.duration_minutes ?? 30} onChange={f("duration_minutes")}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
           </div>
-        </Modal>
+          <div>
+            <label className="block font-medium text-gray-700 mb-1">Status</label>
+            <select value={form.status ?? "ACTIVE"} onChange={f("status")}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+            </select>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button onClick={() => setMode(null)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm">Cancel</button>
+            <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:bg-blue-300">
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
-        <ConfirmDialog isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete}
-          title="Delete Service" message={`Delete "${deleteTarget?.name}"? This cannot be undone.`} loading={deleting} />
-      </PageLayout>
-    </AuthGuard>
+      <ConfirmDialog open={!!deleteId} title="Delete Service" message="Delete this service permanently?"
+        variant="danger" loading={deleting} onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />
+    </PageLayout>
   );
 }

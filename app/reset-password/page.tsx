@@ -1,91 +1,37 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { FiLock, FiEye, FiEyeOff, FiActivity, FiCheckCircle } from "react-icons/fi";
 import { authAPI } from "@/lib/api";
 import { extractError } from "@/lib/utils";
 
-const OTP_LENGTH = 6;
+type Step = "otp" | "password";
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const router = useRouter();
-  const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(""));
+  const params = useSearchParams();
+  const emailFromQuery = params.get("email") ?? "";
+
+  const [email, setEmail] = useState(emailFromQuery);
+  const [step, setStep] = useState<Step>("otp");
+  const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showNew, setShowNew] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [success, setSuccess] = useState("");
 
-  const email =
-    typeof window !== "undefined"
-      ? sessionStorage.getItem("otp_email") ?? ""
-      : "";
-
-  useEffect(() => {
-    if (!email) router.replace("/forgot-password");
-  }, [email, router]);
-
-  const handleOtpChange = (value: string, index: number) => {
-    const digit = value.replace(/\D/g, "").slice(-1);
-    const newOtp = [...otp];
-    newOtp[index] = digit;
-    setOtp(newOtp);
+  // Step 1: verify OTP
+  const handleVerifyOTP = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError("");
-    if (digit && index < OTP_LENGTH - 1) {
-      inputRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleOtpKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
-    if (e.key === "Backspace" && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, OTP_LENGTH);
-    if (pasted.length === OTP_LENGTH) {
-      setOtp(pasted.split(""));
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const code = otp.join("");
-    if (code.length < OTP_LENGTH) {
-      setError("Please enter the complete 6-digit OTP.");
-      return;
-    }
-    if (!newPassword) {
-      setError("Please enter a new password.");
-      return;
-    }
-    if (newPassword.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
     setLoading(true);
-    setError("");
     try {
-      await authAPI.resetPassword({
-        email,
-        otp: code,
-        new_password: newPassword,
-        confirm_password: confirmPassword,
-      });
-      sessionStorage.removeItem("otp_email");
-      sessionStorage.removeItem("otp_purpose");
-      setSuccess(true);
+      const { data } = await authAPI.verifyPasswordOTP({ email, otp });
+      if (data.success) {
+        setStep("password");
+      }
     } catch (err) {
       setError(extractError(err));
     } finally {
@@ -93,144 +39,172 @@ export default function ResetPasswordPage() {
     }
   };
 
-  if (success) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-teal-50 p-6">
-        <div className="w-full max-w-md text-center">
-          <div className="w-20 h-20 bg-green-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
-            <FiCheckCircle className="w-10 h-10 text-green-600" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Password Updated!
-          </h2>
-          <p className="text-gray-500 text-sm mb-6">
-            Your password has been successfully updated. You can now sign in
-            with your new password.
-          </p>
-          <Link href="/login" className="btn-primary btn-lg w-full inline-flex">
-            Back to Login
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  // Step 2: set new password
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data } = await authAPI.resetPassword({
+        email,
+        otp,
+        new_password: newPassword,
+        confirm_password: confirmPassword,
+      });
+      if (data.success) {
+        setSuccess("Password reset successfully! Redirecting to login…");
+        setTimeout(() => router.push("/login"), 2000);
+      }
+    } catch (err) {
+      setError(extractError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setError("");
+    try {
+      await authAPI.resendOTP({ email, purpose: "PASSWORD_RESET" });
+      setSuccess("A new OTP has been sent.");
+    } catch (err) {
+      setError(extractError(err));
+    }
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-teal-50 p-6">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-teal-500 flex items-center justify-center">
-            <FiActivity className="w-5 h-5 text-white" />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-600 text-white text-2xl mb-3">
+            🔒
           </div>
-          <span className="text-xl font-bold text-gray-900">DentalCare</span>
+          <h1 className="text-2xl font-bold text-gray-800">Reset Password</h1>
+          <p className="text-gray-500 text-sm mt-1">
+            {step === "otp"
+              ? "Enter the OTP sent to your email"
+              : "Create your new password"}
+          </p>
         </div>
 
-        <div className="card">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Reset Password</h2>
-            <p className="text-gray-500 text-sm mt-1">
-              Enter the OTP sent to your email and your new password.
-            </p>
+        {error && (
+          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+            {error}
           </div>
+        )}
+        {success && (
+          <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">
+            {success}
+          </div>
+        )}
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
-                {error}
+        {/* Step 1 – OTP */}
+        {step === "otp" && (
+          <form onSubmit={handleVerifyOTP} className="space-y-4">
+            {!emailFromQuery && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
               </div>
             )}
-
-            {/* OTP */}
             <div>
-              <label className="label">Enter OTP</label>
-              <div className="flex items-center justify-center gap-2 mt-2" onPaste={handlePaste}>
-                {otp.map((digit, i) => (
-                  <input
-                    key={i}
-                    ref={(el) => { inputRefs.current[i] = el; }}
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={1}
-                    value={digit}
-                    onChange={(e) => handleOtpChange(e.target.value, i)}
-                    onKeyDown={(e) => handleOtpKeyDown(e, i)}
-                    className={`w-11 h-12 text-center text-lg font-bold rounded-xl border-2 outline-none transition-all
-                      ${digit ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200"}
-                      focus:border-blue-500 focus:ring-2 focus:ring-blue-100`}
-                    disabled={loading}
-                  />
-                ))}
-              </div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                OTP Code
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                required
+                placeholder="123456"
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-center tracking-widest text-lg"
+              />
             </div>
-
-            {/* New Password */}
-            <div className="form-group">
-              <label className="label">New Password</label>
-              <div className="relative">
-                <FiLock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type={showNew ? "text" : "password"}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="At least 8 characters"
-                  className="input pl-9 pr-10"
-                  autoComplete="new-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowNew((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showNew ? <FiEyeOff className="w-4 h-4" /> : <FiEye className="w-4 h-4" />}
-                </button>
-              </div>
+            <button
+              type="submit"
+              disabled={loading || otp.length !== 6}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg font-medium text-sm transition-colors"
+            >
+              {loading ? "Verifying…" : "Verify OTP"}
+            </button>
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={handleResend}
+                className="text-sm text-blue-600 hover:underline"
+              >
+                Resend OTP
+              </button>
             </div>
+          </form>
+        )}
 
-            {/* Confirm Password */}
-            <div className="form-group">
-              <label className="label">Confirm New Password</label>
-              <div className="relative">
-                <FiLock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type={showConfirm ? "text" : "password"}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Re-enter new password"
-                  className="input pl-9 pr-10"
-                  autoComplete="new-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirm((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showConfirm ? <FiEyeOff className="w-4 h-4" /> : <FiEye className="w-4 h-4" />}
-                </button>
-              </div>
+        {/* Step 2 – New Password */}
+        {step === "password" && (
+          <form onSubmit={handleResetPassword} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                New Password
+              </label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                minLength={8}
+                placeholder="Min. 8 characters"
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
             </div>
-
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Confirm Password
+              </label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                placeholder="Repeat new password"
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            </div>
             <button
               type="submit"
               disabled={loading}
-              className="btn-primary btn-lg w-full"
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg font-medium text-sm transition-colors"
             >
-              {loading ? (
-                <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                "Update Password"
-              )}
+              {loading ? "Resetting…" : "Reset Password"}
             </button>
           </form>
+        )}
 
-          <Link
-            href="/forgot-password"
-            className="flex items-center justify-center gap-2 mt-6 text-sm text-gray-500 hover:text-gray-700"
-          >
-            ← Back
+        <p className="text-center text-sm text-gray-500 mt-6">
+          <Link href="/login" className="text-blue-600 hover:underline">
+            ← Back to login
           </Link>
-        </div>
+        </p>
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense>
+      <ResetPasswordContent />
+    </Suspense>
   );
 }

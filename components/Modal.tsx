@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { FiX } from "react-icons/fi";
 
 interface ModalProps {
-  isOpen: boolean;
+  open: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
@@ -20,7 +20,7 @@ const sizeMap = {
 };
 
 export default function Modal({
-  isOpen,
+  open,
   onClose,
   title,
   children,
@@ -33,7 +33,7 @@ export default function Modal({
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
-    if (isOpen) {
+    if (open) {
       document.addEventListener("keydown", handleKey);
       document.body.style.overflow = "hidden";
     }
@@ -41,9 +41,9 @@ export default function Modal({
       document.removeEventListener("keydown", handleKey);
       document.body.style.overflow = "";
     };
-  }, [isOpen, onClose]);
+  }, [open, onClose]);
 
-  if (!isOpen) return null;
+  if (!open) return null;
 
   return (
     <div

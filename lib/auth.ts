@@ -1,12 +1,16 @@
 import Cookies from "js-cookie";
 
+// Backend returns role as "ADMIN" or "PATIENT" (uppercase)
 export interface User {
-  id: number;
-  username: string;
-  email: string;
+  id: string;
   full_name: string;
-  role: "admin" | "patient";
+  email: string;
+  username: string;
+  role: "ADMIN" | "PATIENT" | "DENTIST";
   phone_number?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // ─── Token helpers ────────────────────────────────────────────────────────────
@@ -29,7 +33,10 @@ export const clearTokens = () => {
 
 // ─── User helpers ─────────────────────────────────────────────────────────────
 export const setUser = (user: User) => {
-  Cookies.set("user", JSON.stringify(user), { expires: 1, sameSite: "strict" });
+  Cookies.set("user", JSON.stringify(user), {
+    expires: 1,
+    sameSite: "strict",
+  });
 };
 
 export const getUser = (): User | null => {
@@ -42,29 +49,22 @@ export const getUser = (): User | null => {
   }
 };
 
-export const isAuthenticated = (): boolean => {
-  return !!getAccessToken() && !!getUser();
-};
+export const isAuthenticated = (): boolean =>
+  !!getAccessToken() && !!getUser();
 
-export const isAdmin = (): boolean => {
-  const user = getUser();
-  return user?.role === "admin";
-};
-
-export const isPatient = (): boolean => {
-  const user = getUser();
-  return user?.role === "patient";
-};
+// Backend role is uppercase: "ADMIN" | "PATIENT"
+export const isAdmin = (): boolean => getUser()?.role === "ADMIN";
+export const isPatient = (): boolean => getUser()?.role === "PATIENT";
+export const isDentist = (): boolean => getUser()?.role === "DENTIST";
 
 export const logout = () => {
   clearTokens();
-  if (typeof window !== "undefined") {
-    window.location.href = "/login";
-  }
+  if (typeof window !== "undefined") window.location.href = "/login";
 };
 
 export const getRedirectPath = (role: string): string => {
-  if (role === "admin") return "/admin/dashboard";
-  if (role === "patient") return "/patient/dashboard";
+  if (role === "ADMIN") return "/admin/dashboard";
+  if (role === "PATIENT") return "/patient/dashboard";
+  if (role === "DENTIST") return "/dentist/dashboard";
   return "/login";
 };

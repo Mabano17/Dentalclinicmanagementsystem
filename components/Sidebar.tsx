@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   FiHome,
   FiCalendar,
@@ -25,14 +25,12 @@ import { MdOutlineMedicalServices } from "react-icons/md";
 import { logout, getUser } from "@/lib/auth";
 import { getInitials } from "@/lib/utils";
 
-// ─── Nav item type ────────────────────────────────────────────────────────────
 interface NavItem {
   label: string;
   href: string;
   icon: React.ElementType;
 }
 
-// ─── Admin nav ────────────────────────────────────────────────────────────────
 const adminNav: NavItem[] = [
   { label: "Dashboard", href: "/admin/dashboard", icon: FiHome },
   { label: "Patients", href: "/admin/patients", icon: FiUsers },
@@ -46,7 +44,6 @@ const adminNav: NavItem[] = [
   { label: "Reports", href: "/admin/reports", icon: FiBarChart2 },
 ];
 
-// ─── Patient nav ──────────────────────────────────────────────────────────────
 const patientNav: NavItem[] = [
   { label: "Dashboard", href: "/patient/dashboard", icon: FiHome },
   { label: "My Appointments", href: "/patient/appointments", icon: FiCalendar },
@@ -57,15 +54,24 @@ const patientNav: NavItem[] = [
   { label: "My Profile", href: "/patient/profile", icon: FiSettings },
 ];
 
+const dentistNav: NavItem[] = [
+  { label: "Dashboard", href: "/dentist/dashboard", icon: FiHome },
+  { label: "Appointments", href: "/dentist/appointments", icon: FiCalendar },
+];
+
 interface SidebarProps {
-  role: "admin" | "patient";
+  role: "ADMIN" | "PATIENT" | "DENTIST";
 }
 
 export default function Sidebar({ role }: SidebarProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const user = getUser();
-  const navItems = role === "admin" ? adminNav : patientNav;
+  const [user, setUser] = useState<ReturnType<typeof getUser>>(null);
+
+  useEffect(() => {
+    setUser(getUser());
+  }, []);
+  const navItems = role === "ADMIN" ? adminNav : role === "DENTIST" ? dentistNav : patientNav;
 
   const NavLinks = () => (
     <nav className="flex flex-col gap-1 flex-1 mt-2">
