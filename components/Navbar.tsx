@@ -2,11 +2,10 @@
 
 import { useState, useEffect, useRef } from "react";
 import { FiBell, FiMessageSquare, FiLogOut, FiUser } from "react-icons/fi";
-import { messagesAPI, authAPI } from "@/lib/api";
-import { getUser, clearTokens, getRefreshToken } from "@/lib/auth";
+import { messagesAPI } from "@/lib/api";
+import { getUserSync, logout } from "@/lib/auth";
 import { getInitials } from "@/lib/utils";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 interface NavbarProps {
   title: string;
@@ -14,12 +13,11 @@ interface NavbarProps {
 }
 
 export default function Navbar({ title, role }: NavbarProps) {
-  const router = useRouter();
-  const [user, setUser] = useState<ReturnType<typeof getUser>>(null);
+  const [user, setUser] = useState<ReturnType<typeof getUserSync>>(null);
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    setUser(getUser());
+    setUser(getUserSync());
   }, []);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -49,13 +47,7 @@ export default function Navbar({ title, role }: NavbarProps) {
   }, []);
 
   const handleLogout = async () => {
-    try {
-      const refresh = getRefreshToken();
-      if (refresh) await authAPI.logout(refresh);
-    } catch { /* ignore */ } finally {
-      clearTokens();
-      router.push("/login");
-    }
+    await logout();
   };
 
   const messagesHref = role === "ADMIN" ? "/admin/messages" : role === "DENTIST" ? "/dentist/messages" : "/patient/messages";

@@ -23,8 +23,10 @@ interface Message {
 
 export default function AdminMessagesPage() {
   const { showToast } = useToast();
-  const me = getUser();
+  const [me, setMe] = useState<{ id: string } | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+
+  useEffect(() => { getUser().then(setMe); }, []);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Message | null>(null);
   const [replyOpen, setReplyOpen] = useState(false);

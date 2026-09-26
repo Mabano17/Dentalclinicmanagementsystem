@@ -109,10 +109,13 @@ export default function HomePage() {
 
   // If already logged in, redirect to dashboard
   useEffect(() => {
-    if (isAuthenticated()) {
-      const user = getUser();
-      router.replace(user?.role === "ADMIN" ? "/admin/dashboard" : user?.role === "DENTIST" ? "/dentist/dashboard" : "/patient/dashboard");
-    }
+    (async () => {
+      const authenticated = await isAuthenticated();
+      if (authenticated) {
+        const user = await getUser();
+        router.replace(user?.role === "ADMIN" ? "/admin/dashboard" : user?.role === "DENTIST" ? "/dentist/dashboard" : "/patient/dashboard");
+      }
+    })();
   }, [router]);
 
   useEffect(() => {

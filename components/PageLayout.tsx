@@ -1,9 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Sidebar from "./Sidebar";
 import Navbar from "./Navbar";
 import { ToastProvider } from "./Toast";
-import { getUser } from "@/lib/auth";
+import { getUserSync } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
+import { setUser } from "@/lib/auth";
 
 interface PageLayoutProps {
   children: React.ReactNode;
@@ -11,9 +14,37 @@ interface PageLayoutProps {
 }
 
 export default function PageLayout({ children, title }: PageLayoutProps) {
-  const user = getUser();
-  // Backend returns "ADMIN" | "PATIENT"; normalise to lowercase for Sidebar/Navbar
-  const role = (user?.role ?? "PATIENT").toUpperCase() as "ADMIN" | "PATIENT" | "DENTIST";
+  const [role, setRole] = useState<"ADMIN" | "PATIENT" | "DENTIST">("PATIENT");
+
+  useEffect(() => {
+    // Try sync first for instant render
+    const cached = getUserSync();
+    if (cached) {
+      setRole(cached.role);
+      return;
+    }
+    // Fallback to async Supabase
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role, full_name, username, phone_number")
+        .eq("id", data.user.id)
+        .single();
+      if (profile) {
+        const user = {
+          id: data.user.id,
+          email: data.user.email!,
+          full_name: profile.full_name ?? "",
+          username: profile.username ?? "",
+          role: (profile.role ?? "PATIENT") as "ADMIN" | "PATIENT" | "DENTIST",
+          phone_number: profile.phone_number ?? "",
+        };
+        setUser(user);
+        setRole(user.role);
+      }
+    });
+  }, []);
 
   return (
     <ToastProvider>

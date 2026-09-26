@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import PageLayout from "@/components/PageLayout";
-import { authAPI } from "@/lib/api";
-import { getUser, setUser } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
+import { setUser } from "@/lib/auth";
 import { extractError } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
 
@@ -14,7 +14,6 @@ interface Profile {
   username: string;
   phone_number: string;
   role: string;
-  is_active: boolean;
   created_at: string;
 }
 
@@ -29,9 +28,17 @@ export default function PatientProfilePage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const { data } = await authAPI.getProfile();
-        setProfile(data.user);
-        setForm({ full_name: data.user.full_name, phone_number: data.user.phone_number ?? "" });
+        const { data: authData } = await supabase.auth.getUser();
+        if (!authData.user) return;
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", authData.user.id)
+          .single();
+        if (error) throw error;
+        const p = { ...data, email: authData.user.email! };
+        setProfile(p);
+        setForm({ full_name: p.full_name ?? "", phone_number: p.phone_number ?? "" });
       } catch (err) { showToast(extractError(err), "error"); }
       finally { setLoading(false); }
     };
@@ -41,12 +48,25 @@ export default function PatientProfilePage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const { data } = await authAPI.updateProfile(form);
-      setProfile(data.user);
-      setForm({ full_name: data.user.full_name, phone_number: data.user.phone_number ?? "" });
-      // Keep cookie in sync
-      const current = getUser();
-      if (current) setUser({ ...current, full_name: data.user.full_name, phone_number: data.user.phone_number });
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData.user) return;
+      const { data, error } = await supabase
+        .from("profiles")
+        .update(form)
+        .eq("id", authData.user.id)
+        .select()
+        .single();
+      if (error) throw error;
+      const updated = { ...data, email: authData.user.email! };
+      setProfile(updated);
+      setUser({
+        id: updated.id,
+        email: updated.email,
+        full_name: updated.full_name,
+        username: updated.username,
+        role: updated.role,
+        phone_number: updated.phone_number,
+      });
       setEditing(false);
       showToast("Profile updated.", "success");
     } catch (err) { showToast(extractError(err), "error"); }
@@ -65,7 +85,6 @@ export default function PatientProfilePage() {
     <PageLayout title="My Profile">
       <div className="p-6 max-w-lg mx-auto">
         <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          {/* Avatar */}
           <div className="flex items-center gap-4 mb-6">
             <div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl font-bold">
               {profile?.full_name?.charAt(0) ?? "?"}
@@ -86,7 +105,6 @@ export default function PatientProfilePage() {
                 ["Email", profile?.email],
                 ["Username", profile?.username],
                 ["Phone Number", profile?.phone_number || "—"],
-                ["Account Status", profile?.is_active ? "Active" : "Inactive"],
               ].map(([l, v]) => (
                 <div key={l} className="flex justify-between py-2 border-b border-gray-100 text-sm">
                   <span className="text-gray-500 font-medium">{l}</span>
@@ -111,9 +129,6 @@ export default function PatientProfilePage() {
                 <input type="tel" value={form.phone_number}
                   onChange={(e) => setForm((p) => ({ ...p, phone_number: e.target.value }))}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div className="text-xs text-gray-400 bg-gray-50 rounded-lg p-3">
-                Email and username cannot be changed. Contact an administrator if needed.
               </div>
               <div className="flex gap-3">
                 <button onClick={() => setEditing(false)}

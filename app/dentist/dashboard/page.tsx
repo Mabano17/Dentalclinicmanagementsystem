@@ -22,12 +22,12 @@ interface Appointment {
 
 function DentistDashboardPage() {
   const { showToast } = useToast();
-  const [user, setUser] = useState<ReturnType<typeof getUser>>(null);
+  const [user, setUser] = useState<{ full_name?: string } | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [stats, setStats] = useState({ total: 0, pending: 0, completed: 0, cancelled: 0 });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { setUser(getUser()); }, []);
+  useEffect(() => { getUser().then(setUser); }, []);
 
   useEffect(() => {
     const load = async () => {

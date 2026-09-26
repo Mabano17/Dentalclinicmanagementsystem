@@ -3,77 +3,61 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { authAPI } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import { extractError } from "@/lib/utils";
 
 export default function RegisterPage() {
   const router = useRouter();
   const [form, setForm] = useState({
-    full_name: "",
-    email: "",
-    username: "",
-    phone_number: "",
-    password: "",
-    confirm_password: "",
+    full_name: "", email: "", username: "", phone_number: "", password: "", confirm_password: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-    setFieldErrors((prev) => { const n = { ...prev }; delete n[e.target.name]; return n; });
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setFieldErrors({});
-
     if (form.password !== form.confirm_password) {
-      setFieldErrors({ confirm_password: ["Passwords do not match."] });
+      setError("Passwords do not match.");
       return;
     }
-
     setLoading(true);
     try {
-      const { data } = await authAPI.register(form);
-      if (data.success) {
-        // Redirect to OTP verification page with email and purpose=REGISTRATION
-        router.push(
-          `/verify-otp?email=${encodeURIComponent(data.email)}&purpose=REGISTRATION`
-        );
-      }
-    } catch (err: unknown) {
-      const e = err as { response?: { data?: { errors?: Record<string, string[]>; message?: string } } };
-      if (e.response?.data?.errors) {
-        setFieldErrors(e.response.data.errors);
-      } else {
-        setError(extractError(err));
-      }
+      const { error: err } = await supabase.auth.signUp({
+        email: form.email,
+        password: form.password,
+        options: {
+          data: {
+            full_name: form.full_name,
+            username: form.username,
+            phone_number: form.phone_number,
+            role: "PATIENT",
+          },
+        },
+      });
+      if (err) throw err;
+      router.push(`/login?registered=1`);
+    } catch (err) {
+      setError(extractError(err));
     } finally {
       setLoading(false);
     }
   };
 
-  const fe = (field: string) =>
-    fieldErrors[field]?.[0] ?? null;
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4 py-10">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-600 text-white text-2xl mb-3">
-            🦷
-          </div>
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-600 text-white text-2xl mb-3">🦷</div>
           <h1 className="text-2xl font-bold text-gray-800">Create Account</h1>
           <p className="text-gray-500 text-sm mt-1">Register as a patient</p>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-            {error}
-          </div>
+          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -94,30 +78,19 @@ export default function RegisterPage() {
                 onChange={handleChange}
                 placeholder={f.placeholder}
                 required={f.name !== "phone_number"}
-                className={`w-full px-4 py-2.5 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  fe(f.name) ? "border-red-400" : "border-gray-300"
-                }`}
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              {fe(f.name) && (
-                <p className="text-red-600 text-xs mt-1">{fe(f.name)}</p>
-              )}
             </div>
           ))}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg font-medium text-sm transition-colors"
-          >
+          <button type="submit" disabled={loading}
+            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg font-medium text-sm transition-colors">
             {loading ? "Creating account…" : "Create Account"}
           </button>
         </form>
 
         <p className="text-center text-sm text-gray-500 mt-6">
           Already have an account?{" "}
-          <Link href="/login" className="text-blue-600 hover:underline font-medium">
-            Sign in
-          </Link>
+          <Link href="/login" className="text-blue-600 hover:underline font-medium">Sign in</Link>
         </p>
       </div>
     </div>

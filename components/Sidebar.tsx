@@ -66,11 +66,9 @@ interface SidebarProps {
 export default function Sidebar({ role }: SidebarProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [user, setUser] = useState<ReturnType<typeof getUser>>(null);
+  const [user, setUser] = useState<{ full_name?: string; username?: string; role?: string } | null>(null);
 
-  useEffect(() => {
-    setUser(getUser());
-  }, []);
+  useEffect(() => { getUser().then(setUser); }, []);
   const navItems = role === "ADMIN" ? adminNav : role === "DENTIST" ? dentistNav : patientNav;
 
   const NavLinks = () => (

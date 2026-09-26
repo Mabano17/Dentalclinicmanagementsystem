@@ -25,8 +25,10 @@ interface AdminUser { id: string; full_name: string; email: string }
 
 export default function PatientMessagesPage() {
   const { showToast } = useToast();
-  const me = getUser();
+  const [me, setMe] = useState<{ id: string } | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+
+  useEffect(() => { getUser().then(setMe); }, []);
   const [selected, setSelected] = useState<Message | null>(null);
   const [loading, setLoading] = useState(true);
   const [composeOpen, setComposeOpen] = useState(false);

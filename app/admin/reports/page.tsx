@@ -23,20 +23,19 @@ export default function AdminReportsPage() {
   const [revenueData, setRevenueData] = useState<{ monthly: unknown[]; methodBreakdown: unknown[] }>({ monthly: [], methodBreakdown: [] });
   const [serviceData, setServiceData] = useState<{ popular: unknown[] }>({ popular: [] });
   const load = useCallback(async () => {
-    const params = { date_from: dateFrom || undefined, date_to: dateTo || undefined };
     try {
       const [d, a, r, s] = await Promise.all([
-        reportsAPI.getDashboard(params),
-        reportsAPI.getAppointments(params),
-        reportsAPI.getRevenue(params),
-        reportsAPI.getServices(params),
+        reportsAPI.getDashboard(),
+        reportsAPI.getAppointments(),
+        reportsAPI.getRevenue(),
+        reportsAPI.getServices(),
       ]);
       setDashboard(d.data.data);
       setApptData({ monthly: a.data.data.monthly_statistics ?? [], statusBreakdown: a.data.data.status_breakdown ?? [], topDentists: a.data.data.top_dentists ?? [] });
       setRevenueData({ monthly: r.data.data.monthly_revenue ?? [], methodBreakdown: r.data.data.payment_method_breakdown ?? [] });
       setServiceData({ popular: s.data.data.popular_services ?? [] });
     } catch (err) { showToast(extractError(err), "error"); }
-  }, [dateFrom, dateTo, showToast]);
+  }, [showToast]);
 
   useEffect(() => { load(); }, [load]);
 
